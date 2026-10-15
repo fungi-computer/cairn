@@ -1,0 +1,293 @@
+export { CairnDefinitionError, CairnGenerationError, defineIdFamily, identifierCandidateSchema, identifierDefinitionSchema, type CairnId, type IdCodec, type IdFamily, type IdKindDefinition, type IdOf, type IdParseError, type IdParseResult, } from "./identifier.js";
+export { ALPHABET, DEFAULT, LONG, SHORT, nanoid } from "./nanoid.js";
+export { ADJECTIVES, NOUNS, words } from "./words.js";
+export { replayKey, deterministicReplayKey, correlationKey, createCorrelationSequence, type ReplayKey, type CorrelationKey, } from "./ephemeral-key.js";
+declare const ephemeralKeyBrand: unique symbol;
+/** Opaque key for one command, retained unchanged across ambiguous retries. */
+export type ReplayKey = string & {
+    /** Distinguishes a replay command from other string identifiers. */
+    readonly [ephemeralKeyBrand]: "replay";
+};
+/** UUIDv4 correlation key for a transport or external provider protocol. */
+export type CorrelationKey = string & {
+    /** Distinguishes a transport correlation from a replay command. */
+    readonly [ephemeralKeyBrand]: "correlation";
+};
+/** Mint once per command; the caller owns retention and completion. */
+export declare function replayKey(): ReplayKey;
+/**
+ * Derive one replay identity from a host-owned domain and ordered tuple.
+ * Callers include the complete authority scope and stored command identity.
+ * JSON string encoding preserves lone surrogates; byte-length frames prevent
+ * boundary shifts. This encoding and its version remain stable across restarts.
+ */
+export declare function deterministicReplayKey(domain: string, parts: readonly string[]): Promise<ReplayKey>;
+/** Generate a correlation UUID without creating a durable domain identity. */
+export declare function correlationKey(): CorrelationKey;
+/**
+ * Own a connection-local sequence for protocols such as CDP that require
+ * numeric correlation IDs. A new connection owns a new sequence.
+ */
+export declare function createCorrelationSequence(): () => number;
+export {};
+import type * as z from "zod";
+import { identifierCandidateSchema, identifierDefinitionSchema } from "./input-schema.js";
+export { identifierCandidateSchema, identifierDefinitionSchema };
+declare const cairnIdBrand: unique symbol;
+/**
+ * Canonical opaque identifier branded by its declaring family, kind, and wire
+ * grammar version.
+ *
+ * @typeParam F - Declaring identifier family.
+ * @typeParam K - Identifier kind within the family.
+ * @typeParam V - Retained wire grammar version; currently version 1.
+ */
+export type CairnId<F extends string, K extends string, V extends 1 = 1> = string & {
+    /** Compile-time identity metadata that is never serialized. */
+    readonly [cairnIdBrand]: readonly [F, K, V];
+};
+/**
+ * Extracts the distinctly branded identifier produced by an ID codec.
+ *
+ * @typeParam C - Codec whose identifier type is required.
+ */
+export type IdOf<C> = C extends IdCodec<infer F, infer K, infer V> ? CairnId<F, K, V> : never;
+/**
+ * Bounded public description of a rejected identifier value.
+ *
+ * The error deliberately retains neither the rejected value nor a foreign
+ * cause.
+ *
+ * @typeParam F - Declaring identifier family.
+ * @typeParam K - Identifier kind within the family.
+ */
+export type IdParseError<F extends string, K extends string> = Readonly<{
+    /** Stable machine-readable error discriminator. */
+    code: "invalid_id";
+    /** Declared family of the codec that rejected the value. */
+    family: F;
+    /** Declared kind of the codec that rejected the value. */
+    kind: K;
+    /** Wire grammar version used for validation. */
+    version: 1;
+    /** Deterministic failure class selected by the version 1 precedence law. */
+    reason: "bounds" | "grammar" | "non_canonical";
+}>;
+/**
+ * Successful canonical parsing or one bounded parse error.
+ *
+ * @typeParam I - Branded identifier returned after successful parsing.
+ * @typeParam F - Declaring identifier family.
+ * @typeParam K - Identifier kind within the family.
+ */
+export type IdParseResult<I, F extends string, K extends string> = Readonly<{
+    /** Marks a successful canonical parse. */
+    ok: true;
+    /** Original canonical value branded for this codec. */
+    value: I;
+}> | Readonly<{
+    /** Marks a rejected parse without returning the input. */
+    ok: false;
+    /** Bounded reason and codec metadata for the rejection. */
+    error: IdParseError<F, K>;
+}>;
+/**
+ * Generator and canonical parser for one declared identifier family and kind.
+ *
+ * @typeParam F - Declaring identifier family.
+ * @typeParam K - Identifier kind within the family.
+ * @typeParam V - Retained wire grammar version; currently version 1.
+ */
+export type IdCodec<F extends string, K extends string, V extends 1 = 1> = {
+    /** Declared identifier family; it is not serialized into metadata. */
+    readonly family: F;
+    /** Declared identifier kind; it is not serialized into metadata. */
+    readonly kind: K;
+    /** Wire grammar version implemented by this codec. */
+    readonly version: V;
+    /**
+     * Generates one canonical identifier with a 21-character base36 suffix.
+     *
+     * @returns A fresh canonical identifier branded for this codec.
+     * @throws {@link CairnGenerationError} When secure entropy is unavailable.
+     */
+    generate(): CairnId<F, K, V>;
+    /** Schema for the untrusted wire boundary; outputs this codec's branded ID. */
+    readonly schema: z.ZodType<CairnId<F, K, V>, string>;
+    /**
+     * Parses a decoded string candidate without trimming, decoding, or normalization.
+     *
+     * @param value - Decoded string candidate.
+     * @returns The original branded value or one bounded parse error.
+     */
+    parse(value: z.output<typeof identifierCandidateSchema>): IdParseResult<CairnId<F, K, V>, F, K>;
+    /**
+     * Reports whether a decoded string candidate is canonical for this codec.
+     *
+     * @param value - Decoded string candidate.
+     * @returns Whether the value is accepted by {@link IdCodec.parse}.
+     */
+    is(value: z.output<typeof identifierCandidateSchema>): value is CairnId<F, K, V>;
+};
+/** Trusted declaration for one identifier kind within a family. */
+export type IdKindDefinition = Readonly<{
+    /**
+     * Lowercase ASCII wire prefix, limited to 32 bytes and underscore-separated
+     * segments.
+     */
+    prefix: string;
+}>;
+/**
+ * Readonly family whose every own kind key maps to one distinctly branded
+ * version 1 codec.
+ *
+ * @typeParam F - Declaring identifier family.
+ * @typeParam D - Own identifier-kind declarations for the family.
+ */
+export type IdFamily<F extends string, D extends Readonly<Record<string, IdKindDefinition>>> = Readonly<{
+    readonly [K in keyof D]: IdCodec<F, K & string>;
+}>;
+/**
+ * Bounded error thrown when a trusted family declaration violates Cairn's
+ * version 1 definition invariants.
+ *
+ * This error retains no rejected definition, family, kind, cause, or detail.
+ */
+export declare class CairnDefinitionError extends Error {
+    /** Stable public error name. */
+    readonly name = "CairnDefinitionError";
+    /** Stable machine-readable error discriminator. */
+    readonly code = "invalid_definition";
+    /** Creates a fresh bounded family-definition error. */
+    constructor();
+}
+/**
+ * Bounded error thrown when secure entropy is unavailable during codec
+ * generation.
+ *
+ * This error retains only validated family and kind metadata and never exposes
+ * a foreign cause, detail, or random bytes.
+ */
+export declare class CairnGenerationError extends Error {
+    /** Stable public error name. */
+    readonly name = "CairnGenerationError";
+    /** Stable machine-readable error discriminator. */
+    readonly code = "entropy_unavailable";
+    /** Validated family whose codec could not generate an identifier. */
+    readonly family: string;
+    /** Validated kind whose codec could not generate an identifier. */
+    readonly kind: string;
+    /** Wire grammar version used by the codec. */
+    readonly version = 1;
+    /**
+     * Creates a fresh bounded generation error.
+     *
+     * @param input - Validated family and kind metadata for the failing codec.
+     */
+    constructor(input: Readonly<{
+        family: string;
+        kind: string;
+    }>);
+}
+/**
+ * Validates one trusted version 1 family declaration and creates its readonly
+ * family-scoped codecs.
+ *
+ * Family and kind names, prefixes, own-key counts, and
+ * prefix uniqueness must satisfy the accepted Cairn invariants before any codec
+ * is returned.
+ *
+ * @typeParam F - Literal identifier-family name.
+ * @typeParam D - Literal own kind declarations for the family.
+ * @param definition - Trusted version 1 family declaration to validate.
+ * @returns One readonly codec property for every own kind key.
+ * @throws {@link CairnDefinitionError} When any declaration invariant or
+ * property access fails.
+ */
+export declare function defineIdFamily<const F extends string, const D extends Readonly<Record<string, IdKindDefinition>>>(definition: Readonly<{
+    family: F;
+    version: 1;
+    kinds: D;
+}>): IdFamily<F, D>;
+import * as z from "zod";
+/** Validate one bounded version 1 family declaration. */
+export declare const identifierDefinitionSchema: z.ZodObject<{
+    family: z.ZodString;
+    version: z.ZodLiteral<1>;
+    kinds: z.ZodRecord<z.ZodString, z.ZodObject<{
+        prefix: z.ZodString;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+/** Decode a wire candidate before calling a typed string codec. */
+export declare const identifierCandidateSchema: z.ZodString;
+/** URL-safe lowercase alphabet used for opaque identifiers. */
+export declare const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+/** Identifier size for compact, non-security-sensitive labels. */
+export declare const SHORT = 8;
+/** Default identifier size. */
+export declare const DEFAULT = 21;
+/** Identifier size for callers that require additional collision resistance. */
+export declare const LONG = 32;
+/**
+ * Generate a raw opaque identifier through the runtime-selected nanoid
+ * implementation.
+ *
+ * @remarks
+ * This legacy helper accepts trusted sizing-policy inputs; CPU and output scale
+ * with the requested size. Finite sizing values delegate exactly to the
+ * runtime-selected upstream implementation and may be runtime-specific.
+ * Callers should supply a bounded nonnegative integer unless they consciously
+ * accept upstream/runtime-specific behavior. Only positive and negative
+ * infinity receive Cairn's fixed bounded `RangeError`. For new durable
+ * identifiers, use `defineIdFamily`.
+ *
+ * @param length - Requested output size; supply a bounded nonnegative integer
+ * unless accepting upstream/runtime-specific behavior.
+ * @returns A lowercase alphanumeric identifier.
+ * @throws If `length` is positive or negative infinity. Other finite-size
+ * exceptions follow the upstream runtime behavior.
+ */
+export declare function nanoid(length?: number): string;
+/**
+ * Candidate word-name primitives for the Fungi family.
+ *
+ * The generator uses:
+ *   - CSPRNG (`crypto.getRandomValues`) — never Math.random.
+ *   - Rejection sampling for the list index — no modulo bias, every
+ *     word equally likely.
+ *   - Entropy sizing instead of a registry — uniqueness comes from
+ *     bits, not a lookup. Two lists of ~N words: adj-noun ≈ 2·log2(N)
+ *     bits; add nouns to grow it. There is no global registry and no
+ *     check-and-retry — the caller sizes `count` to the collision
+ *     target (the birthday bound).
+ *
+ * The vocabulary combines mycological and ranch terms.
+ *
+ * @packageDocumentation
+ */
+/** Modifiers — fungal + ranch descriptors (the first slot). */
+export declare const ADJECTIVES: readonly ["gilled", "velvety", "spored", "saprotrophic", "mycorrhizal", "luminescent", "honeycomb", "truffley", "wispy", "earthy", "mossy", "woody", "waxy", "gelatinous", "coral", "inkcapped", "feathery", "stiped", "ringed", "annulate", "scaly", "shaggy", "fuzzy", "spiky", "conical", "umbral", "parasol", "leathery", "damp", "dewy", "bristly", "powdery", "yeasty", "musty", "ancient", "patient", "steady", "faithful", "hardy", "rootbound", "forested", "shaded", "sunlit", "sporeladen", "golden", "honeyed", "amber", "ivory", "crimson", "violet", "indigo", "silver", "mossgreen", "midnight", "creamy", "buttery", "porcelain", "glossy", "matte", "ribbed", "fluted", "wavy", "lobed", "branched", "curled", "folded", "hooded", "crowned", "blushing", "weeping", "laughing", "dancing", "singing", "whistling", "glowing", "ghostly", "fairy", "elfin", "rustic", "homey", "barnraised", "pasture", "orchard", "mill", "woven", "gardened", "herded", "trailed", "ridged", "meadow", "fielded", "vined", "rooted", "tendered", "seasoned", "ripe", "wild", "tame", "broody", "stubborn", "gentle", "drowsy", "watchful", "wandering", "migratory", "burrowed", "nested", "perched", "loamy", "mulched", "composted", "fermented", "brewed", "cured", "smoked", "pickled", "preserved", "aged", "vintage", "heirloom", "grandmothers", "forgotten", "remembered", "beloved", "cherished", "worn", "weathered", "windblown", "rainsoaked", "frosted", "snowed", "bloomed", "flowered", "seeded", "sprouted", "grafted", "pruned", "harvested", "threshed", "milled", "baked", "proofed", "risen", "folded", "twisted", "braided", "stitched", "patched", "mended", "polished", "burnished", "glazed", "gilded", "verdigris", "patinaed", "microdosed", "tripping", "wavy", "prismatic", "shimmering", "rippling", "echoing", "oracular", "mystic", "kaleidoscopic", "auroral", "nebular", "azure", "psychedelic", "transcendent", "visionary", "wandering", "dreaming", "phantom", "spectral", "iridescent", "liminal", "tidal", "celestial", "cosmic", "astral", "ethereal", "incandescent"];
+/** Nouns — the mycological + ranch family (the rest of the slots). */
+export declare const NOUNS: readonly ["shiitake", "morel", "chanterelle", "bolete", "puffball", "oyster", "enoki", "maitake", "lionsmane", "truffle", "porcini", "agaric", "amanita", "bracket", "conk", "stipe", "cap", "gill", "spore", "hypha", "mycelium", "sporocarp", "earthstar", "stinkhorn", "jelly", "milkcap", "blewit", "cep", "hedgehog", "woodear", "waxcap", "inkcap", "birdnest", "cup", "saddle", "fieldcap", "rust", "smut", "ergot", "lichen", "yeast", "mold", "toadstool", "fruitingbody", "basidiocarp", "ascocarp", "perithecium", "apothecium", "cystidium", "basidium", "clamp", "septa", "rhizomorph", "sclerotium", "gemma", "annulus", "volva", "pileus", "lamella", "trama", "gleba", "peridium", "sporangium", "zygospora", "conidia", "teleomorph", "anamorph", "saprobe", "endophyte", "epiphyte", "decomposer", "recycler", "alchemist", "mycorrhiza", "hyphae", "web", "net", "lattice", "thread", "strand", "root", "tendril", "runner", "vine", "ivy", "moss", "fern", "liverwort", "mule", "cairn", "almanac", "parrot", "birddog", "watchdog", "pigeon", "ranch", "barn", "coop", "pasture", "meadow", "field", "orchard", "gate", "fence", "silo", "well", "windmill", "homestead", "trail", "ridge", "creek", "hill", "grove", "vineyard", "apiary", "garden", "plot", "furrow", "shed", "stable", "trough", "hayloft", "rootcellar", "smokehouse", "springhouse", "millstone", "weathervane", "lantern", "tinderbox", "candlemold", "honeycomb", "beeswax", "propolis", "nectar", "pollen", "comb", "burrow", "den", "nest", "perch", "warren", "colony", "swarm", "flock", "herd", "pod", "grist", "flour", "starter", "mother", "scoby", "kombucha", "miso", "tempeh", "cheese", "rennet", "whey", "curd", "cream", "butter", "braid", "loaf", "crust", "crumb", "fiddlehead", "sorrel", "ramp", "morelberry", "huckleberry", "thimbleberry", "salmonberry", "serviceberry", "chokecherry", "microdose", "trip", "shroom", "liberty", "teacher", "treasure", "wanderer", "seeker", "dreamer", "shaman", "visionary", "tripper", "oracle", "seer", "augur", "prism", "fractal", "kaleidoscope", "spectrum", "nebula", "aurora", "comet", "meteor", "eclipse", "zenith", "horizon", "mirage", "echo", "ripple", "shimmer", "glimmer", "phantom", "twilight", "starlight", "moonbeam"];
+/**
+ * Generate a candidate word name such as `luminescent-morel`.
+ *
+ * @remarks
+ * This legacy helper accepts trusted sizing-policy inputs; CPU and output scale
+ * with the requested count. The count uses
+ * `Math.max(1, Math.floor(count ?? 2))`: `NaN`, `0`, `0.5`, `-1`, and negative
+ * infinity produce one word, while `9` produces nine. Positive infinity
+ * throws a bounded `RangeError`. For new durable identifiers, use
+ * `defineIdFamily`.
+ *
+ * @param options - Candidate-name sizing and separator; bound untrusted values
+ * before calling.
+ * @throws If `options.count` is positive infinity.
+ * @returns A candidate name assembled from the exported vocabularies.
+ */
+export declare function words(options?: {
+    /** Number of words (default 2 = adjective-noun). */
+    count?: number;
+    /** Separator (default "-"). */
+    separator?: string;
+}): string;

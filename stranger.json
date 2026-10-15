@@ -1,0 +1,87 @@
+{
+  "expectedTarballFiles": [
+    "package/LICENSE",
+    "package/README.md",
+    "package/dist/ephemeral-key.d.ts",
+    "package/dist/ephemeral-key.js",
+    "package/dist/identifier.d.ts",
+    "package/dist/identifier.js",
+    "package/dist/index.d.ts",
+    "package/dist/index.js",
+    "package/dist/input-schema.d.ts",
+    "package/dist/input-schema.js",
+    "package/dist/internal/identifier-codec.d.ts",
+    "package/dist/internal/identifier-codec.js",
+    "package/dist/nanoid.d.ts",
+    "package/dist/nanoid.js",
+    "package/dist/words.d.ts",
+    "package/dist/words.js",
+    "package/docs/api/README.md",
+    "package/docs/api/ephemeral-key.md",
+    "package/docs/api/identifier.md",
+    "package/docs/api/index.md",
+    "package/docs/api/words.md",
+    "package/package.json"
+  ],
+  "runtimeFixture": "test/stranger/runtime.mjs",
+  "typecheckFixture": "test/stranger/consumer.mts",
+  "docs": {
+    "sigil": "restricted",
+    "home": {
+      "lead": "Typed, opaque IDs and short-lived keys for TypeScript services, so you never hand-roll an ID format or its parser again.",
+      "example": {
+        "file": "home.ts",
+        "title": "Mint and check an ID",
+        "caption": "Declare an ID family once, then generate IDs and parse untrusted strings with the same codec."
+      },
+      "ladder": {
+        "start": [
+          {
+            "title": "Quickstart",
+            "href": "/quickstart/",
+            "description": "Declare your first ID family and parse an ID back."
+          },
+          {
+            "title": "How Cairn IDs work",
+            "href": "/concepts/#core-concepts",
+            "description": "ID shape, parsing rules and what an ID does not promise."
+          }
+        ],
+        "tasks": [
+          {
+            "title": "Validate IDs at a boundary",
+            "href": "/api/identifier/",
+            "description": "Use each codec's Zod schema, parse and is on incoming strings."
+          },
+          {
+            "title": "Retry and correlate commands",
+            "href": "/api/ephemeral-key/",
+            "description": "replayKey, correlationKey and per-connection sequences."
+          },
+          {
+            "title": "Pick a friendly name",
+            "href": "/api/words/",
+            "description": "words() suggests adjective-noun names from Cairn's lists."
+          }
+        ],
+        "reference": [
+          {
+            "title": "API reference",
+            "href": "/api/",
+            "description": "Every export from the root, ./id and ./words entrypoints."
+          },
+          {
+            "title": "Install",
+            "href": "/install/",
+            "description": "Entrypoints, runtime dependencies and Node.js version."
+          },
+          {
+            "title": "Status and limits",
+            "href": "/status/",
+            "description": "Stability, errors and license."
+          }
+        ]
+      }
+    }
+  }
+}

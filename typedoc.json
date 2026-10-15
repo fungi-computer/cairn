@@ -1,0 +1,13 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "extends": "../../tooling/docs/typedoc.base.json",
+  "name": "@fungi.computer/cairn",
+  "entryPoints": [
+    "src/index.ts",
+    "src/identifier.ts",
+    "src/words.ts",
+    "src/ephemeral-key.ts"
+  ],
+  "tsconfig": "tsconfig.json",
+  "out": "docs/api"
+}

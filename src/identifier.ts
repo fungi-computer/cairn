@@ -1,0 +1,280 @@
+import { createIdentifierCodec } from "./internal/identifier-codec.js";
+import type * as z from "zod";
+import * as zod from "zod";
+import {
+  identifierCandidateSchema,
+  identifierDefinitionSchema,
+} from "./input-schema.js";
+export { identifierCandidateSchema, identifierDefinitionSchema };
+
+// Every ID family shares this codec decoder instead of rebuilding its structure.
+// The owning family/kind relationship is checked below.
+const codecMapSchema = zod.record(
+  zod.string(),
+  zod.object({
+    family: zod.string(),
+    kind: zod.string(),
+    version: zod.literal(1),
+    generate: zod.function(),
+    schema: zod.instanceof(zod.ZodType),
+    parse: zod.function(),
+    is: zod.function(),
+  }),
+);
+
+declare const cairnIdBrand: unique symbol;
+
+/**
+ * Canonical opaque identifier branded by its declaring family, kind, and wire
+ * grammar version.
+ *
+ * @typeParam F - Declaring identifier family.
+ * @typeParam K - Identifier kind within the family.
+ * @typeParam V - Retained wire grammar version; currently version 1.
+ */
+export type CairnId<
+  F extends string,
+  K extends string,
+  V extends 1 = 1,
+> = string & {
+  /** Compile-time identity metadata that is never serialized. */
+  readonly [cairnIdBrand]: readonly [F, K, V];
+};
+
+/**
+ * Extracts the distinctly branded identifier produced by an ID codec.
+ *
+ * @typeParam C - Codec whose identifier type is required.
+ */
+export type IdOf<C> =
+  C extends IdCodec<infer F, infer K, infer V> ? CairnId<F, K, V> : never;
+
+/**
+ * Bounded public description of a rejected identifier value.
+ *
+ * The error deliberately retains neither the rejected value nor a foreign
+ * cause.
+ *
+ * @typeParam F - Declaring identifier family.
+ * @typeParam K - Identifier kind within the family.
+ */
+export type IdParseError<F extends string, K extends string> = Readonly<{
+  /** Stable machine-readable error discriminator. */
+  code: "invalid_id";
+  /** Declared family of the codec that rejected the value. */
+  family: F;
+  /** Declared kind of the codec that rejected the value. */
+  kind: K;
+  /** Wire grammar version used for validation. */
+  version: 1;
+  /** Deterministic failure class selected by the version 1 precedence law. */
+  reason: "bounds" | "grammar" | "non_canonical";
+}>;
+
+/**
+ * Successful canonical parsing or one bounded parse error.
+ *
+ * @typeParam I - Branded identifier returned after successful parsing.
+ * @typeParam F - Declaring identifier family.
+ * @typeParam K - Identifier kind within the family.
+ */
+export type IdParseResult<I, F extends string, K extends string> =
+  | Readonly<{
+      /** Marks a successful canonical parse. */
+      ok: true;
+      /** Original canonical value branded for this codec. */
+      value: I;
+    }>
+  | Readonly<{
+      /** Marks a rejected parse without returning the input. */
+      ok: false;
+      /** Bounded reason and codec metadata for the rejection. */
+      error: IdParseError<F, K>;
+    }>;
+
+/**
+ * Generator and canonical parser for one declared identifier family and kind.
+ *
+ * @typeParam F - Declaring identifier family.
+ * @typeParam K - Identifier kind within the family.
+ * @typeParam V - Retained wire grammar version; currently version 1.
+ */
+export type IdCodec<F extends string, K extends string, V extends 1 = 1> = {
+  /** Declared identifier family; it is not serialized into metadata. */
+  readonly family: F;
+  /** Declared identifier kind; it is not serialized into metadata. */
+  readonly kind: K;
+  /** Wire grammar version implemented by this codec. */
+  readonly version: V;
+
+  /**
+   * Generates one canonical identifier with a 21-character base36 suffix.
+   *
+   * @returns A fresh canonical identifier branded for this codec.
+   * @throws {@link CairnGenerationError} When secure entropy is unavailable.
+   */
+  generate(): CairnId<F, K, V>;
+
+  /** Schema for the untrusted wire boundary; outputs this codec's branded ID. */
+  readonly schema: z.ZodType<CairnId<F, K, V>, string>;
+
+  /**
+   * Parses a decoded string candidate without trimming, decoding, or normalization.
+   *
+   * @param value - Decoded string candidate.
+   * @returns The original branded value or one bounded parse error.
+   */
+  parse(
+    value: z.output<typeof identifierCandidateSchema>,
+  ): IdParseResult<CairnId<F, K, V>, F, K>;
+
+  /**
+   * Reports whether a decoded string candidate is canonical for this codec.
+   *
+   * @param value - Decoded string candidate.
+   * @returns Whether the value is accepted by {@link IdCodec.parse}.
+   */
+  is(
+    value: z.output<typeof identifierCandidateSchema>,
+  ): value is CairnId<F, K, V>;
+};
+
+/** Trusted declaration for one identifier kind within a family. */
+export type IdKindDefinition = Readonly<{
+  /**
+   * Lowercase ASCII wire prefix, limited to 32 bytes and underscore-separated
+   * segments.
+   */
+  prefix: string;
+}>;
+
+/**
+ * Readonly family whose every own kind key maps to one distinctly branded
+ * version 1 codec.
+ *
+ * @typeParam F - Declaring identifier family.
+ * @typeParam D - Own identifier-kind declarations for the family.
+ */
+export type IdFamily<
+  F extends string,
+  D extends Readonly<Record<string, IdKindDefinition>>,
+> = Readonly<{
+  readonly [K in keyof D]: IdCodec<F, K & string>;
+}>;
+
+/**
+ * Bounded error thrown when a trusted family declaration violates Cairn's
+ * version 1 definition invariants.
+ *
+ * This error retains no rejected definition, family, kind, cause, or detail.
+ */
+export class CairnDefinitionError extends Error {
+  /** Stable public error name. */
+  override readonly name = "CairnDefinitionError";
+  /** Stable machine-readable error discriminator. */
+  readonly code = "invalid_definition";
+
+  /** Creates a fresh bounded family-definition error. */
+  constructor() {
+    super("Cairn identifier family definition is invalid");
+  }
+}
+
+/**
+ * Bounded error thrown when secure entropy is unavailable during codec
+ * generation.
+ *
+ * This error retains only validated family and kind metadata and never exposes
+ * a foreign cause, detail, or random bytes.
+ */
+export class CairnGenerationError extends Error {
+  /** Stable public error name. */
+  override readonly name = "CairnGenerationError";
+  /** Stable machine-readable error discriminator. */
+  readonly code = "entropy_unavailable";
+  /** Validated family whose codec could not generate an identifier. */
+  readonly family: string;
+  /** Validated kind whose codec could not generate an identifier. */
+  readonly kind: string;
+  /** Wire grammar version used by the codec. */
+  readonly version = 1;
+
+  /**
+   * Creates a fresh bounded generation error.
+   *
+   * @param input - Validated family and kind metadata for the failing codec.
+   */
+  constructor(input: Readonly<{ family: string; kind: string }>) {
+    super("Cairn entropy source is unavailable");
+    this.family = input.family;
+    this.kind = input.kind;
+  }
+}
+
+/**
+ * Validates one trusted version 1 family declaration and creates its readonly
+ * family-scoped codecs.
+ *
+ * Family and kind names, prefixes, own-key counts, and
+ * prefix uniqueness must satisfy the accepted Cairn invariants before any codec
+ * is returned.
+ *
+ * @typeParam F - Literal identifier-family name.
+ * @typeParam D - Literal own kind declarations for the family.
+ * @param definition - Trusted version 1 family declaration to validate.
+ * @returns One readonly codec property for every own kind key.
+ * @throws {@link CairnDefinitionError} When any declaration invariant or
+ * property access fails.
+ */
+export function defineIdFamily<
+  const F extends string,
+  const D extends Readonly<Record<string, IdKindDefinition>>,
+>(
+  definition: Readonly<{
+    family: F;
+    version: 1;
+    kinds: D;
+  }>,
+): IdFamily<F, D> {
+  let parsed: ReturnType<typeof identifierDefinitionSchema.safeParse>;
+  try {
+    parsed = identifierDefinitionSchema.safeParse(definition);
+  } catch {
+    throw new CairnDefinitionError();
+  }
+  if (!parsed.success) throw new CairnDefinitionError();
+  const validated = parsed.data;
+
+  const family: Record<string, IdCodec<F, string>> = {};
+
+  for (const [kind, kindDefinition] of Object.entries(validated.kinds)) {
+    const prefix = kindDefinition.prefix;
+    family[kind] = createIdentifierCodec({
+      family: definition.family,
+      kind,
+      prefix,
+      entropyUnavailable: () =>
+        new CairnGenerationError({ family: validated.family, kind }),
+    });
+  }
+
+  // The key/kind relationship makes each codec's opaque brand belong to its
+  // declared property. Check that relationship before exposing the mapped type.
+  const familySchema = zod.custom<IdFamily<F, D>>((candidate) => {
+    const decoded = codecMapSchema.safeParse(candidate);
+    if (!decoded.success) return false;
+    const codecs = Object.entries(decoded.data);
+    return (
+      codecs.length === Object.keys(validated.kinds).length &&
+      codecs.every(
+        ([kind, codec]) =>
+          Object.hasOwn(validated.kinds, kind) &&
+          codec.kind === kind &&
+          codec.family === validated.family,
+      )
+    );
+  });
+  const decoded = familySchema.safeParse(family);
+  if (!decoded.success) throw new CairnDefinitionError();
+  return decoded.data;
+}
