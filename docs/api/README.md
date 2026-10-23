@@ -13,4 +13,5 @@
 | [ephemeral-key](ephemeral-key.md) | -                                                    |
 | [identifier](identifier.md)       | -                                                    |
 | [index](index.md)                 | -                                                    |
+| [team-role](team-role.md)         | -                                                    |
 | [words](words.md)                 | Candidate word-name primitives for the Fungi family. |

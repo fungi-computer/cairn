@@ -6,6 +6,7 @@
     "src/index.ts",
     "src/identifier.ts",
     "src/words.ts",
+    "src/team-role.ts",
     "src/ephemeral-key.ts"
   ],
   "tsconfig": "tsconfig.json",

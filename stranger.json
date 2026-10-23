@@ -14,17 +14,24 @@
     "package/dist/internal/identifier-codec.js",
     "package/dist/nanoid.d.ts",
     "package/dist/nanoid.js",
+    "package/dist/team-role.d.ts",
+    "package/dist/team-role.js",
     "package/dist/words.d.ts",
     "package/dist/words.js",
     "package/docs/api/README.md",
     "package/docs/api/ephemeral-key.md",
     "package/docs/api/identifier.md",
     "package/docs/api/index.md",
+    "package/docs/api/team-role.md",
     "package/docs/api/words.md",
     "package/package.json"
   ],
   "runtimeFixture": "test/stranger/runtime.mjs",
-  "typecheckFixture": "test/stranger/consumer.mts",
+  "typechecks": [
+    {
+      "fixture": "test/stranger/consumer.mts"
+    }
+  ],
   "docs": {
     "sigil": "restricted",
     "home": {
