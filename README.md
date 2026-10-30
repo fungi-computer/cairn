@@ -71,8 +71,8 @@ count that fits their collision requirements.
 ## API reference
 
 See the generated [API reference](docs/api/index.md). The public entrypoints are
-`@fungi.computer/cairn`, `@fungi.computer/cairn/id`, and
-`@fungi.computer/cairn/words`.
+`@fungi.computer/cairn`, `@fungi.computer/cairn/id`,
+`@fungi.computer/cairn/words`, and `@fungi.computer/cairn/team-role`.
 
 ## Examples and checks
 

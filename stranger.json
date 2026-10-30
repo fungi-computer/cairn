@@ -75,7 +75,7 @@
           {
             "title": "API reference",
             "href": "/api/",
-            "description": "Every export from the root, ./id and ./words entrypoints."
+            "description": "Every export from the root, ./id, ./words and ./team-role entrypoints."
           },
           {
             "title": "Install",
