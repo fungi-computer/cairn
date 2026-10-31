@@ -45,7 +45,7 @@
     "format:check": "node ../../tooling/repository/scripts/format-package-check.mjs",
     "lint:anti-slop": "node ../../tooling/repository/scripts/lint-package-anti-slop.mjs",
     "test:merge": "pnpm run test && vitest run --config test/runtime/vitest.workerd.config.mjs",
-    "test:nightly": "bash ../../.agents/skills/orchestrate-multi-lane-work/scripts/run-proof.sh node test/runtime/browser-proof.mjs",
+    "test:nightly": "bash ../../tooling/proof-runner/run-proof.sh node test/runtime/browser-proof.mjs",
     "test:unit": "pnpm run test"
   },
   "dependencies": {
